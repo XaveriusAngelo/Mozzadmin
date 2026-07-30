@@ -1,9 +1,120 @@
-<!DOCTYPE html>
-<html>
+<!doctype html>
+<html lang="id">
 <head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#102f46">
   <title>Mozzafiato Scanner</title>
+  <script src="https://unpkg.com/html5-qrcode" defer></script>
+  <style>
+    :root{--navy:#102f46;--blue:#5d9fcc;--bg:#edf3f6;--card:#fff;--text:#172431;--muted:#6d7a85;--line:#d8e2e8;--ok:#157347;--bad:#b42318;--warn:#a15c00}
+    *{box-sizing:border-box}body{margin:0;font-family:Arial,sans-serif;color:var(--text);background:var(--bg)}
+    button,input,textarea{font:inherit}[hidden]{display:none!important}
+    .app{width:min(100%,720px);margin:auto;padding:20px 14px 40px}.top{display:flex;justify-content:space-between;align-items:center;gap:12px}
+    .eyebrow{margin:0;color:var(--blue);font-size:12px;font-weight:900;letter-spacing:.14em}h1{margin:4px 0 18px}.card{padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--card);box-shadow:0 12px 32px rgba(16,47,70,.12)}
+    .field{display:grid;gap:7px;margin-bottom:14px}.field span{font-size:13px;font-weight:800}.field input,.field textarea{width:100%;padding:12px 13px;border:1px solid var(--line);border-radius:11px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.btn{min-height:45px;border:0;border-radius:11px;padding:11px 14px;font-weight:850;cursor:pointer}.primary{background:var(--navy);color:#fff}.secondary{background:#eaf1f5;color:var(--navy)}.danger{background:var(--bad);color:#fff}.btn:disabled{opacity:.55}
+    .status{display:flex;justify-content:space-between;gap:10px;margin-bottom:12px;padding:10px 12px;border-radius:12px;background:var(--navy);color:#fff;font-size:13px}
+    #reader{overflow:hidden;border-radius:14px;background:#0b1218}.actions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:12px}
+    details{margin-top:14px;color:var(--muted);font-size:13px}details summary{margin-bottom:10px;font-weight:800}.result{margin-top:14px;text-align:center}.result.ok{background:#eef9f3;border-color:#9dd1b2}.result.bad{background:#fff1f0;border-color:#e5aaa5}.result.warn{background:#fff7e6;border-color:#e1c188}
+    .icon{display:grid;width:62px;height:62px;place-items:center;margin:0 auto 12px;border-radius:50%;background:#eaf1f5;font-size:30px}.ok .icon{background:var(--ok);color:#fff}.bad .icon{background:var(--bad);color:#fff}.warn .icon{background:var(--warn);color:#fff}
+    .ticket{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0;text-align:left}.item{padding:10px;border-radius:10px;background:rgba(255,255,255,.75)}.item span{display:block;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase}
+    .seats{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:14px 0}.seat input{position:absolute;opacity:0}.seat label{display:block;min-width:58px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:900}.seat input:checked+label{background:var(--navy);border-color:var(--navy);color:#fff}
+    dialog{width:min(calc(100% - 28px),440px);border:0;border-radius:18px;padding:0}dialog::backdrop{background:rgba(0,0,0,.62)}.dialog{padding:20px}
+    @media(max-width:540px){.grid,.actions,.ticket{grid-template-columns:1fr}}
+  </style>
 </head>
 <body>
-  <h1>Scanner Ready 🚀</h1>
+<main class="app">
+  <div class="top"><div><p class="eyebrow">MOZZAFIATO 2026</p><h1>Ticket Scanner</h1></div><button id="settingsBtn" class="btn secondary">⚙</button></div>
+
+  <section id="setup" class="card">
+    <h2>Hubungkan Scanner</h2>
+    <p>Tempel URL Apps Script lalu login.</p>
+    <form id="setupForm">
+      <label class="field"><span>Apps Script Web App URL</span><input id="apiUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" required></label>
+      <div class="grid">
+        <label class="field"><span>Username</span><input id="username" value="AdminTicketing" required></label>
+        <label class="field"><span>Password</span><input id="password" type="password" required></label>
+      </div>
+      <label class="field"><span>Gate / Petugas</span><input id="gate" value="Main Gate" required></label>
+      <button id="connectBtn" class="btn primary" type="submit">Hubungkan</button>
+      <p id="setupMessage"></p>
+    </form>
+  </section>
+
+  <section id="scanner" hidden>
+    <div class="status"><strong id="userLabel">Connected</strong><span id="gateLabel">Main Gate</span></div>
+    <section class="card">
+      <div id="reader"></div>
+      <div class="actions"><button id="startBtn" class="btn primary">Aktifkan Kamera</button><button id="stopBtn" class="btn secondary" disabled>Matikan Kamera</button></div>
+      <details><summary>QR tidak terbaca? Tempel isi QR</summary><label class="field"><textarea id="manualQr" rows="3"></textarea></label><button id="manualBtn" class="btn secondary">Periksa QR</button></details>
+    </section>
+    <section id="result" class="card result"><div class="icon">⌁</div><h2>Siap Memindai</h2><p>Arahkan kamera ke QR tiket.</p></section>
+  </section>
+</main>
+
+<dialog id="settingsDialog"><form method="dialog" class="dialog"><h2>Settings</h2><label class="field"><span>Gate / Petugas</span><input id="settingsGate"></label><button id="saveBtn" class="btn primary" value="save">Simpan</button> <button id="disconnectBtn" class="btn danger" value="disconnect">Disconnect</button></form></dialog>
+
+<script>
+const K={url:'mzf_url',token:'mzf_token',user:'mzf_user',gate:'mzf_gate'};
+const s={url:localStorage.getItem(K.url)||'',token:localStorage.getItem(K.token)||'',user:localStorage.getItem(K.user)||'',gate:localStorage.getItem(K.gate)||'Main Gate',scanner:null,scanning:false,busy:false,qr:''};
+const $=id=>document.getElementById(id);
+window.addEventListener('DOMContentLoaded',init);
+
+function init(){
+  $('apiUrl').value=s.url;$('username').value=s.user||'AdminTicketing';$('gate').value=s.gate;$('settingsGate').value=s.gate;
+  $('setupForm').addEventListener('submit',connect);$('startBtn').onclick=start;$('stopBtn').onclick=stop;
+  $('manualBtn').onclick=()=>preview($('manualQr').value.trim());$('settingsBtn').onclick=()=>{$('settingsGate').value=s.gate;$('settingsDialog').showModal()};
+  $('saveBtn').onclick=e=>{e.preventDefault();s.gate=$('settingsGate').value.trim()||'Main Gate';localStorage.setItem(K.gate,s.gate);$('gateLabel').textContent=s.gate;$('settingsDialog').close()};
+  $('disconnectBtn').onclick=async e=>{e.preventDefault();await stop();localStorage.removeItem(K.token);s.token='';$('settingsDialog').close();showSetup()};
+  if(s.url&&s.token){showScanner();ping()}else showSetup();
+}
+async function connect(e){
+  e.preventDefault();const b=$('connectBtn');b.disabled=true;b.textContent='Menghubungkan…';$('setupMessage').textContent='';
+  try{
+    const url=clean($('apiUrl').value),user=$('username').value.trim(),pass=$('password').value,gate=$('gate').value.trim()||'Main Gate';
+    const r=await jsonp(url,{api:'scanner',action:'login',username:user,password:pass});
+    if(!r.success||!r.token)throw Error(r.message||'Login gagal.');
+    Object.assign(s,{url,token:r.token,user:r.username||user,gate});
+    localStorage.setItem(K.url,s.url);localStorage.setItem(K.token,s.token);localStorage.setItem(K.user,s.user);localStorage.setItem(K.gate,s.gate);
+    $('password').value='';showScanner();await start();
+  }catch(err){$('setupMessage').textContent=err.message}finally{b.disabled=false;b.textContent='Hubungkan'}
+}
+async function ping(){try{const r=await api('ping');if(!r.success)throw Error()}catch(_){localStorage.removeItem(K.token);s.token='';showSetup();$('setupMessage').textContent='Sesi berakhir. Login kembali.'}}
+function showSetup(){$('setup').hidden=false;$('scanner').hidden=true}
+function showScanner(){$('setup').hidden=true;$('scanner').hidden=false;$('userLabel').textContent=s.user||'Connected';$('gateLabel').textContent=s.gate}
+async function start(){
+  if(s.scanning||s.busy)return;if(typeof Html5Qrcode==='undefined'){error('Library scanner gagal dimuat.');return}
+  s.scanner=s.scanner||new Html5Qrcode('reader');$('startBtn').disabled=true;
+  try{await s.scanner.start({facingMode:'environment'},{fps:12,qrbox:(w,h)=>{const z=Math.floor(Math.min(w,h)*.72);return{width:z,height:z}}},text=>{stop();preview(text)},()=>{});s.scanning=true;$('stopBtn').disabled=false;idle('Arahkan kamera ke QR tiket.')}
+  catch(_){$('startBtn').disabled=false;error('Kamera tidak dapat dibuka. Pastikan izin kamera sudah Allow.')}
+}
+async function stop(){if(s.scanner&&s.scanning){try{await s.scanner.stop();await s.scanner.clear()}catch(_){}}s.scanning=false;$('startBtn').disabled=false;$('stopBtn').disabled=true}
+async function preview(qr){
+  if(!qr||s.busy)return;s.busy=true;s.qr=qr;loading('Memeriksa tiket…');
+  try{const r=await api('preview',{qr});if(!r.success)throw Error(r.message||'Tiket tidak valid.');vib([80,40,80]);if(r.fullyCheckedIn){warn('Semua tiket sudah dipakai',`${r.checkedInCount||r.totalTickets||0} tiket sudah check-in.`);return}ticket(r)}
+  catch(err){vib([180,70,180]);error(err.message)}finally{s.busy=false}
+}
+function ticket(r){
+  const seats=Array.isArray(r.remainingSeats)?r.remainingSeats:[];const opts=seats.map((x,i)=>`<div class="seat"><input type="radio" name="seat" id="s_${esc(x)}" value="${esc(x)}" ${i===0?'checked':''}><label for="s_${esc(x)}">${esc(x)}</label></div>`).join('');
+  const el=$('result');el.className='card result ok';el.innerHTML=`<div class="icon">✓</div><h2>Tiket Valid</h2><div class="ticket"><div class="item"><span>Booking ID</span><strong>${esc(r.bookingId||'—')}</strong></div><div class="item"><span>Nama</span><strong>${esc(r.name||'—')}</strong></div><div class="item"><span>Show</span><strong>Show ${esc(r.show||'—')}</strong></div><div class="item"><span>Progress</span><strong>${esc(r.checkedInCount||0)} / ${esc(r.totalTickets||seats.length)}</strong></div></div><p>Pilih satu seat:</p><div class="seats">${opts}</div><button id="confirmBtn" class="btn primary">Confirm Check-in</button> <button id="anotherBtn" class="btn secondary">Scan Lain</button>`;
+  $('confirmBtn').onclick=confirmCheckin;$('anotherBtn').onclick=start;
+}
+async function confirmCheckin(){
+  if(s.busy)return;const seat=document.querySelector('input[name="seat"]:checked');if(!seat){warn('Pilih seat','Pilih satu seat terlebih dahulu.');return}
+  s.busy=true;loading('Mencatat check-in…');
+  try{const r=await api('confirm',{qr:s.qr,seatId:seat.value,gate:s.gate});if(!r.success)throw Error(r.message||'Check-in gagal.');beep();vib([100,50,100]);success('Check-in Berhasil',`${r.name||''} · Seat ${r.seatId||seat.value}`,!r.fullyCheckedIn?()=>preview(s.qr):start,!r.fullyCheckedIn?'Seat Berikutnya':'Scan Berikutnya')}
+  catch(err){error(err.message)}finally{s.busy=false}
+}
+function idle(m){render('', '⌁','Siap Memindai',m)}function loading(m){render('', '…','Mohon Tunggu',m)}
+function error(m){render('bad','×','Tidak Valid',m,start,'Scan Lagi')}function warn(t,m){render('warn','!',t,m,start,'Scan Lagi')}
+function success(t,m,next,label){render('ok','✓',t,m,next,label)}
+function render(cls,ic,t,m,next,label){const el=$('result');el.className=`card result ${cls}`;el.innerHTML=`<div class="icon">${ic}</div><h2>${esc(t)}</h2><p>${esc(m)}</p>${next?`<p><button id="nextBtn" class="btn ${cls==='ok'?'primary':'secondary'}">${esc(label)}</button></p>`:''}`;if(next)$('nextBtn').onclick=next}
+function api(action,extra={}){return jsonp(s.url,{api:'scanner',action,token:s.token,...extra})}
+function jsonp(url,p,timeout=20000){return new Promise((res,rej)=>{const cb='mzf_'+Date.now()+'_'+Math.floor(Math.random()*1e5),sc=document.createElement('script');let done=false;const cleanUp=()=>{delete window[cb];sc.remove()},tm=setTimeout(()=>{if(done)return;done=true;cleanUp();rej(Error('Server terlalu lama merespons.'))},timeout);window[cb]=d=>{if(done)return;done=true;clearTimeout(tm);cleanUp();res(d||{})};sc.src=clean(url)+'?'+new URLSearchParams({...p,callback:cb,_:Date.now()});sc.onerror=()=>{if(done)return;done=true;clearTimeout(tm);cleanUp();rej(Error('Tidak dapat menghubungi Apps Script API.'))};document.body.appendChild(sc)})}
+function clean(v){return String(v||'').trim().split('?')[0].replace(/\/+$/,'')}function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;')}
+function vib(p){if(navigator.vibrate)navigator.vibrate(p)}function beep(){try{const a=new AudioContext(),o=a.createOscillator(),g=a.createGain();o.frequency.value=880;g.gain.value=.08;o.connect(g);g.connect(a.destination);o.start();setTimeout(()=>{o.stop();a.close()},110)}catch(_){}}
+</script>
 </body>
 </html>
