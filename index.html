@@ -19,7 +19,8 @@
     details{margin-top:14px;color:var(--muted);font-size:13px}details summary{margin-bottom:10px;font-weight:800}.result{margin-top:14px;text-align:center}.result.ok{background:#eef9f3;border-color:#9dd1b2}.result.bad{background:#fff1f0;border-color:#e5aaa5}.result.warn{background:#fff7e6;border-color:#e1c188}
     .icon{display:grid;width:62px;height:62px;place-items:center;margin:0 auto 12px;border-radius:50%;background:#eaf1f5;font-size:30px}.ok .icon{background:var(--ok);color:#fff}.bad .icon{background:var(--bad);color:#fff}.warn .icon{background:var(--warn);color:#fff}
     .ticket{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin:14px 0;text-align:left}.item{padding:10px;border-radius:10px;background:rgba(255,255,255,.75)}.item span{display:block;color:var(--muted);font-size:11px;font-weight:800;text-transform:uppercase}
-    .seats{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:14px 0}.seat input{position:absolute;opacity:0}.seat label{display:block;min-width:58px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:900}.seat input:checked+label{background:var(--navy);border-color:var(--navy);color:#fff}
+    .seats{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:14px 0}.seat input{position:absolute;opacity:0}.seat label{display:block;min-width:58px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff;font-weight:900;cursor:pointer;user-select:none}.seat input:checked+label{background:var(--navy);border-color:var(--navy);color:#fff}
+    .seat-tools{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin:10px 0 2px}.seat-tools .btn{min-height:38px;padding:8px 11px;font-size:12px}.selection-count{min-width:78px;color:var(--muted);font-size:12px;font-weight:850}
     dialog{width:min(calc(100% - 28px),440px);border:0;border-radius:18px;padding:0}dialog::backdrop{background:rgba(0,0,0,.62)}.dialog{padding:20px}
     @media(max-width:540px){.grid,.actions,.ticket{grid-template-columns:1fr}}
   </style>
@@ -30,7 +31,7 @@
 
   <section id="setup" class="card">
     <h2>Hubungkan Scanner</h2>
-    <p>Tempel URL Apps Script lalu login.</p>
+    <p>URL Apps Script sudah terisi otomatis. Tinggal login dan isi Gate / Petugas.</p>
     <form id="setupForm">
       <label class="field"><span>Apps Script Web App URL</span><input id="apiUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" required></label>
       <div class="grid">
@@ -57,8 +58,9 @@
 <dialog id="settingsDialog"><form method="dialog" class="dialog"><h2>Settings</h2><label class="field"><span>Gate / Petugas</span><input id="settingsGate"></label><button id="saveBtn" class="btn primary" value="save">Simpan</button> <button id="disconnectBtn" class="btn danger" value="disconnect">Disconnect</button></form></dialog>
 
 <script>
+const DEFAULT_API_URL='https://script.google.com/macros/s/AKfycbyNK8g_vMSQG9U_BXIUutIRSMqgBy-92qa1CA_yRtsDJg5CjAz4EvNSiUTzZmS2AM-M/exec';
 const K={url:'mzf_url',token:'mzf_token',user:'mzf_user',gate:'mzf_gate'};
-const s={url:localStorage.getItem(K.url)||'',token:localStorage.getItem(K.token)||'',user:localStorage.getItem(K.user)||'',gate:localStorage.getItem(K.gate)||'Main Gate',scanner:null,scanning:false,busy:false,qr:''};
+const s={url:localStorage.getItem(K.url)||DEFAULT_API_URL,token:localStorage.getItem(K.token)||'',user:localStorage.getItem(K.user)||'',gate:localStorage.getItem(K.gate)||'Main Gate',scanner:null,scanning:false,busy:false,qr:''};
 const $=id=>document.getElementById(id);
 window.addEventListener('DOMContentLoaded',init);
 
@@ -74,7 +76,7 @@ async function connect(e){
   e.preventDefault();const b=$('connectBtn');b.disabled=true;b.textContent='Menghubungkan…';$('setupMessage').textContent='';
   try{
     const url=clean($('apiUrl').value),user=$('username').value.trim(),pass=$('password').value,gate=$('gate').value.trim()||'Main Gate';
-    const r=await jsonp(url,{api:'scanner',action:'login',username:user,password:pass});
+    const r=await jsonp(url,{api:'scanner',action:'login',username:user,password:pass,operatorName:gate});
     if(!r.success||!r.token)throw Error(r.message||'Login gagal.');
     Object.assign(s,{url,token:r.token,user:r.username||user,gate});
     localStorage.setItem(K.url,s.url);localStorage.setItem(K.token,s.token);localStorage.setItem(K.user,s.user);localStorage.setItem(K.gate,s.gate);
@@ -97,15 +99,38 @@ async function preview(qr){
   catch(err){vib([180,70,180]);error(err.message)}finally{s.busy=false}
 }
 function ticket(r){
-  const seats=Array.isArray(r.remainingSeats)?r.remainingSeats:[];const opts=seats.map((x,i)=>`<div class="seat"><input type="radio" name="seat" id="s_${esc(x)}" value="${esc(x)}" ${i===0?'checked':''}><label for="s_${esc(x)}">${esc(x)}</label></div>`).join('');
-  const el=$('result');el.className='card result ok';el.innerHTML=`<div class="icon">✓</div><h2>Tiket Valid</h2><div class="ticket"><div class="item"><span>Booking ID</span><strong>${esc(r.bookingId||'—')}</strong></div><div class="item"><span>Nama</span><strong>${esc(r.name||'—')}</strong></div><div class="item"><span>Show</span><strong>Show ${esc(r.show||'—')}</strong></div><div class="item"><span>Progress</span><strong>${esc(r.checkedInCount||0)} / ${esc(r.totalTickets||seats.length)}</strong></div></div><p>Pilih satu seat:</p><div class="seats">${opts}</div><button id="confirmBtn" class="btn primary">Confirm Check-in</button> <button id="anotherBtn" class="btn secondary">Scan Lain</button>`;
-  $('confirmBtn').onclick=confirmCheckin;$('anotherBtn').onclick=start;
+  const seats=Array.isArray(r.remainingSeats)?r.remainingSeats:[];
+  const opts=seats.map((x,i)=>`<div class="seat"><input type="checkbox" name="seat" id="s_${i}" value="${esc(x)}"><label for="s_${i}">${esc(x)}</label></div>`).join('');
+  const el=$('result');el.className='card result ok';el.innerHTML=`<div class="icon">✓</div><h2>Tiket Valid</h2><div class="ticket"><div class="item"><span>Booking ID</span><strong>${esc(r.bookingId||'—')}</strong></div><div class="item"><span>Nama</span><strong>${esc(r.name||'—')}</strong></div><div class="item"><span>Show</span><strong>Show ${esc(r.show||'—')}</strong></div><div class="item"><span>Progress</span><strong>${esc(r.checkedInCount||0)} / ${esc(r.totalTickets||seats.length)}</strong></div></div><p>Pilih seat yang akan check-in <strong>(bisa lebih dari satu)</strong>:</p><div class="seat-tools"><button id="selectAllBtn" type="button" class="btn secondary">Pilih Semua</button><button id="clearSeatsBtn" type="button" class="btn secondary">Kosongkan</button><span id="seatCount" class="selection-count">0 dipilih</span></div><div class="seats">${opts}</div><button id="confirmBtn" class="btn primary" disabled>Confirm Check-in</button> <button id="anotherBtn" class="btn secondary">Scan Lain</button>`;
+  document.querySelectorAll('input[name="seat"]').forEach(input=>input.addEventListener('change',updateSeatSelection));
+  $('selectAllBtn').onclick=()=>{document.querySelectorAll('input[name="seat"]').forEach(input=>input.checked=true);updateSeatSelection()};
+  $('clearSeatsBtn').onclick=()=>{document.querySelectorAll('input[name="seat"]').forEach(input=>input.checked=false);updateSeatSelection()};
+  $('confirmBtn').onclick=confirmCheckin;$('anotherBtn').onclick=start;updateSeatSelection();
+}
+function updateSeatSelection(){
+  const selected=[...document.querySelectorAll('input[name="seat"]:checked')];
+  const count=selected.length;
+  if($('seatCount'))$('seatCount').textContent=`${count} dipilih`;
+  if($('confirmBtn')){$('confirmBtn').disabled=count===0;$('confirmBtn').textContent=count?`Confirm Check-in (${count})`:'Confirm Check-in'}
 }
 async function confirmCheckin(){
-  if(s.busy)return;const seat=document.querySelector('input[name="seat"]:checked');if(!seat){warn('Pilih seat','Pilih satu seat terlebih dahulu.');return}
-  s.busy=true;loading('Mencatat check-in…');
-  try{const r=await api('confirm',{qr:s.qr,seatId:seat.value,gate:s.gate});if(!r.success)throw Error(r.message||'Check-in gagal.');beep();vib([100,50,100]);success('Check-in Berhasil',`${r.name||''} · Seat ${r.seatId||seat.value}`,!r.fullyCheckedIn?()=>preview(s.qr):start,!r.fullyCheckedIn?'Seat Berikutnya':'Scan Berikutnya')}
-  catch(err){error(err.message)}finally{s.busy=false}
+  if(s.busy)return;
+  const seats=[...document.querySelectorAll('input[name="seat"]:checked')].map(input=>input.value);
+  if(!seats.length){warn('Pilih seat','Pilih minimal satu seat terlebih dahulu.');return}
+  s.busy=true;loading(`Mencatat check-in ${seats.length} seat…`);
+  try{
+    const r=await api('confirm',{qr:s.qr,seatIds:JSON.stringify(seats),gate:s.gate});
+    if(!r.success)throw Error(r.message||'Check-in gagal.');
+    beep();vib([100,50,100]);
+    const confirmed=Array.isArray(r.seatIds)&&r.seatIds.length?r.seatIds:seats;
+    const failed=Array.isArray(r.failed)?r.failed:[];
+    const failedText=failed.length?` · Gagal: ${failed.map(x=>x.seatId).join(', ')}`:'';
+    const title=failed.length?'Check-in Sebagian Berhasil':'Check-in Berhasil';
+    const message=`${r.name||''} · ${confirmed.length} seat: ${confirmed.join(', ')}${failedText}`;
+    const next=!r.fullyCheckedIn?()=>preview(s.qr):start;
+    const label=!r.fullyCheckedIn?'Cek Seat Tersisa':'Scan Berikutnya';
+    success(title,message,next,label);
+  }catch(err){error(err.message)}finally{s.busy=false}
 }
 function idle(m){render('', '⌁','Siap Memindai',m)}function loading(m){render('', '…','Mohon Tunggu',m)}
 function error(m){render('bad','×','Tidak Valid',m,start,'Scan Lagi')}function warn(t,m){render('warn','!',t,m,start,'Scan Lagi')}
