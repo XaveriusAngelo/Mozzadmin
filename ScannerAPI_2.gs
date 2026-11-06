@@ -4,42 +4,9 @@
  * adminLogin, adminCheckSession,
  * adminPreviewScannedTicket, adminConfirmCheckIn.
  */
-function doGet(e) {
-  const p = e && e.parameter ? e.parameter : {};
-  const api = String(p.api || '').trim().toLowerCase();
-  const action = String(p.action || '').trim().toLowerCase();
-
-  // `api=scanner` is the preferred route. Accepting a known scanner
-  // action as a fallback keeps older deployed frontends compatible.
-  if (api !== 'scanner' && !['login', 'ping', 'preview', 'confirm'].includes(action)) {
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        message: 'API tidak dikenal.'
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
-  return handleScannerApi_(e);
-}
-
 function handleScannerApi_(e) {
   const p = e && e.parameter ? e.parameter : {};
-  let callback;
-
-  try {
-    callback = scannerCallback_(p.callback);
-  } catch (error) {
-    return ContentService
-      .createTextOutput(JSON.stringify({
-        success: false,
-        message: error && error.message
-          ? error.message
-          : String(error || 'Callback JSONP tidak valid.')
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-
+  const callback = scannerCallback_(p.callback);
   const action = String(p.action || '').trim().toLowerCase();
   let result;
 
@@ -65,11 +32,13 @@ function handleScannerApi_(e) {
         username: session.username || 'AdminTicketing'
       };
     } else if (action === 'preview') {
-      result = scannerResult_(
+      result = Object.assign(
+        { success: true },
         adminPreviewScannedTicket(
           String(p.token || ''),
           String(p.qr || '')
-        )
+        ) || {}
+      );
       );
     } else if (action === 'confirm') {
       const seatIds = scannerSeatIds_(p.seatIds);
@@ -82,7 +51,8 @@ function handleScannerApi_(e) {
           String(p.gate || 'Main Gate')
         );
       } else {
-        result = scannerResult_(
+        result = Object.assign(
+          { success: true },
           adminConfirmCheckIn(
             String(p.token || ''),
             String(p.qr || ''),
@@ -122,14 +92,6 @@ function scannerCallback_(value) {
   }
 
   return callback;
-}
-
-function scannerResult_(value) {
-  const result = value && typeof value === 'object' ? value : {};
-
-  return Object.assign({}, result, {
-    success: result.success === true
-  });
 }
 
 
