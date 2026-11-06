@@ -39,7 +39,6 @@ function handleScannerApi_(e) {
           String(p.qr || '')
         ) || {}
       );
-      );
     } else if (action === 'confirm') {
       const seatIds = scannerSeatIds_(p.seatIds);
 
@@ -82,10 +81,6 @@ function handleScannerApi_(e) {
 
 function scannerCallback_(value) {
   const callback = String(value || '').trim();
-
-  if (!callback) {
-    throw new Error('Parameter callback JSONP wajib diisi.');
-  }
 
   if (!/^[A-Za-z_$][0-9A-Za-z_$\.]*$/.test(callback)) {
     throw new Error('Callback JSONP tidak valid.');
