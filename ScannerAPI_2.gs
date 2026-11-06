@@ -6,8 +6,12 @@
  */
 function doGet(e) {
   const p = e && e.parameter ? e.parameter : {};
+  const api = String(p.api || '').trim().toLowerCase();
+  const action = String(p.action || '').trim().toLowerCase();
 
-  if (String(p.api || '').trim().toLowerCase() !== 'scanner') {
+  // `api=scanner` is the preferred route. Accepting a known scanner
+  // action as a fallback keeps older deployed frontends compatible.
+  if (api !== 'scanner' && !['login', 'ping', 'preview', 'confirm'].includes(action)) {
     return ContentService
       .createTextOutput(JSON.stringify({
         success: false,
