@@ -3,10 +3,26 @@
  * Requires these existing Admin.gs functions:
  * adminLogin, adminCheckSession,
  * adminPreviewScannedTicket, adminConfirmCheckIn.
+ *
+ * Route this handler from the project's existing doGet(e):
+ * if (String(e.parameter.api || '').trim().toLowerCase() === 'scanner') {
+ *   return handleScannerApi_(e);
+ * }
  */
+
 function handleScannerApi_(e) {
   const p = e && e.parameter ? e.parameter : {};
   const callback = scannerCallback_(p.callback);
+
+  if (!callback) {
+    return ContentService
+      .createTextOutput(JSON.stringify({
+        success: false,
+        message: 'Callback JSONP tidak valid.'
+      }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+
   const action = String(p.action || '').trim().toLowerCase();
   let result;
 
@@ -82,11 +98,9 @@ function handleScannerApi_(e) {
 function scannerCallback_(value) {
   const callback = String(value || '').trim();
 
-  if (!/^[A-Za-z_$][0-9A-Za-z_$\.]*$/.test(callback)) {
-    throw new Error('Callback JSONP tidak valid.');
-  }
-
-  return callback;
+  return /^[A-Za-z_$][0-9A-Za-z_$]*$/.test(callback)
+    ? callback
+    : '';
 }
 
 
@@ -104,6 +118,10 @@ function scannerSeatIds_(value) {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       values = parsed;
+    } else if (typeof parsed === 'string') {
+      values = [parsed];
+    } else {
+      values = raw.split(',');
     }
   } catch (_) {
     values = raw.split(',');
